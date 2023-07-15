@@ -37,8 +37,7 @@ VERSION = str('.'.join(str(x) for x in VERSION_TUPLE))
 PREDEFINED_FILES = {}
 
 # all of these files are in ~/.config
-# TODO these have duplicates
-DOT_CONFIG_FILES = {
+DOT_CONFIG_FILES = [
     "kdeglobals",
     "kscreenlockerrc",
     "kwinrc",
@@ -90,7 +89,7 @@ DOT_CONFIG_FILES = {
     "device_automounter_kcmrc",
     "kded5rc",
     "kded_device_automounterrc",
-}
+]
 
 # populate the dictionary
 for file in DOT_CONFIG_FILES:
@@ -165,11 +164,32 @@ def parse_path(path: str) -> Tuple[List[str], str]:
     if length < 2 or length == 2 and not segments[1]:
         raise RuntimeError(f"Invalid path '{path}', missing the key")
 
-    return segments, file
+    # im stripping the path just in case, this may not be a good idea but eh
+    return [x.strip for x in segments], file
+
+def print_configs():
+    '''Prints all configs files that are known'''
+    print('Config files that are known')
+    for k, v in PREDEFINED_FILES.items():
+        print('  ' + v)
+    print()
 
 def main(raw_args=sys.argv[1:]):
+    def make_final_action(fn):
+        '''Creates action that runs fn and then quits'''
+        class custom_action(argparse.Action):
+            def __init__(self, nargs=0, **kw):
+                super().__init__(nargs=nargs, **kw)
+
+            def __call__(self, parser, args, values, option_string=None):
+                fn()
+                parser.exit()
+
+        return custom_action
+
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        prog='kcfg',
         description=rf"""
 Version {VERSION}
 For source code go to https://github.com/sandorex/kcfg
@@ -201,7 +221,7 @@ Examples:
     parser.add_argument('-q', action='store_true', help='makes the application not write anything, unless any error arises')
     parser.add_argument('--file', type=str, help='file to use for read/write operation, error if path is already specified in the path')
     parser.add_argument('--write', type=str, help='write following value to the path')
-    # TODO add option to list all config files defined in the database
+    parser.add_argument('-l', '--list-configs', action=make_final_action(print_configs), help='lists all known config files then quits')
 
     # positional
     parser.add_argument('path', help='path to use for read/write operation')
@@ -225,7 +245,7 @@ Examples:
     if not file:
         file = PREDEFINED_FILES['kdeglobals'] # TODO make this into a global var
 
-        if args.q:
+        if not args.q:
             print('No file specified, defaulting to kdeglobals')
 
     # only expand if inside the path
@@ -243,7 +263,7 @@ Examples:
     # i dont have to check anything about the file, it will be created anyways
 
     if args.write:
-        if args.q:
+        if not args.q:
             print("Writing '{args.write}' to '{args.path}'")
 
         from io import StringIO
