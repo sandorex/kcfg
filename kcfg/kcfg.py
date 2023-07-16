@@ -30,8 +30,7 @@ import argparse
 
 from typing import Tuple, List
 
-VERSION_TUPLE = (0, 1, 0)
-VERSION = str('.'.join(str(x) for x in VERSION_TUPLE))
+VERSION = '0.1.0a0'
 
 # these are known files and their path on the the computer
 PREDEFINED_FILES = {}
@@ -95,7 +94,10 @@ DOT_CONFIG_FILES = [
 for file in DOT_CONFIG_FILES:
     PREDEFINED_FILES[file.lower()] = os.path.join(os.getenv('HOME'), '.config', file)
 
-def write_file(fp, data):
+# default file used if no file is specified
+DEFAULT_FILE = PREDEFINED_FILES['kdeglobals']
+
+def _write_file(fp, data):
     """Writes data to file as INI
 
     I think there is no need for any processing, just using bare `configparser`
@@ -107,12 +109,13 @@ def write_file(fp, data):
 
     parser.read_dict(data)
 
-    parser.write(fp)
+    # kwriteconfig5 does not add spaces around delimiters
+    parser.write(fp, space_around_delimiters=False)
 
 # TODO deal with locking [$i]
 # TODO deal with dynamic evaluation [$e]
 # read more at https://userbase.kde.org/KDE_System_Administration/Configuration_Files#Example:_Using_[$i]
-def read_file(filepath) -> dict:
+def _read_file(filepath) -> dict:
     """Reads data from KDE INI config file
 
     There was no need for nay processing as configparser does not care for correctness
@@ -130,18 +133,13 @@ def read_file(filepath) -> dict:
     # return a dict
     return { x: dict(parser.items(x)) for x in parser.sections() }
 
-def parse_path(path: str) -> Tuple[List[str], str]:
+def _parse_path(path: str) -> Tuple[List[str], str]:
     """Parses path for the setting, returns the name of section and optionally file
 
-    Multiple formats
-        '[Group 1][Group 2]Key' - formatted same as in the file
-        '/Group 1/Group 2/Key' - path without file specified, defaults to 'kdeglobals' but another argument should override it
-        'kcminputrc/Group 1/Group 2/Key' - path uses 'kcminputrc' file
+    Parses it like a path:
+        '/Group 1/Group 2/Key' - path without file specified
+        'kcminputrc/Group 1/Group 2/Key' - path with file alias specified
     """
-    if path.startswith('['):
-        # replace all brackets so it matches the other syntax to not duplicate the logic
-        path = '/' + path[1:].replace('][', '/').replace(']', '/')
-
     # remove any duplicate slashes
     while '//' in path:
         path = path.replace('//', '/')
@@ -165,15 +163,20 @@ def parse_path(path: str) -> Tuple[List[str], str]:
         raise RuntimeError(f"Invalid path '{path}', missing the key")
 
     # im stripping the path just in case, this may not be a good idea but eh
-    return [x.strip for x in segments], file
+    return [x.strip() for x in segments], file
 
-def print_configs():
+def _print_configs():
     '''Prints all configs files that are known'''
     print('Config files that are known')
     for k, v in PREDEFINED_FILES.items():
         print('  ' + v)
     print()
+    print('If you feel like any are missing or should be removed make an issue at:')
+    print('  https://github.com/sandorex/kcfg')
+    print()
 
+# NOTE you can if you want to run the main function with args without running
+# the script like `main(['kcminputrc/11111/2222/MouseAcceleration', '--write', '1'])`
 def main(raw_args=sys.argv[1:]):
     def make_final_action(fn):
         '''Creates action that runs fn and then quits'''
@@ -190,8 +193,8 @@ def main(raw_args=sys.argv[1:]):
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         prog='kcfg',
-        description=rf"""
-Version {VERSION}
+        description=r"""
+Licensed under GPLv3
 For source code go to https://github.com/sandorex/kcfg
 
 Replacement for kwriteconfig5 / kreadconfig5 written in Python
@@ -199,17 +202,13 @@ Replacement for kwriteconfig5 / kreadconfig5 written in Python
         epilog=r"""
 
 Examples:
-    $ kcfg '[Group 1][Group 2]Key'
+    $ kcfg '/Group 1/Group 2/Key'
 
-        Is equivalent to
+        Which is equivalent to
 
     $ kreadconfig5 --group 'Group 1' --group 'Group 2' --key 'Key'`
 
-        Which could also be written as
-
-    $ kcfg '/Group 1/Group 2/Key'
-
-        You could also specify a known KDE config file
+        You could also specify a config alias like
 
     $ kcfg 'kcminputrc/Group 1/Group 2/Key' which would use ~/.config/kcminputrc
 
@@ -221,38 +220,45 @@ Examples:
     parser.add_argument('-q', action='store_true', help='makes the application not write anything, unless any error arises')
     parser.add_argument('--file', type=str, help='file to use for read/write operation, error if path is already specified in the path')
     parser.add_argument('--write', type=str, help='write following value to the path')
-    parser.add_argument('-l', '--list-configs', action=make_final_action(print_configs), help='lists all known config files then quits')
+    parser.add_argument('--delete', action='store_true', help='delete the key value if it exists')
+    parser.add_argument('--dry-run', dest='dry_run', action='store_true', help='prints the result instead of writing to the file, does nothing when reading')
+    parser.add_argument('-l', '--list-configs', action=make_final_action(_print_configs), help='lists all known config files then quits')
 
     # positional
     parser.add_argument('path', help='path to use for read/write operation')
 
     args = parser.parse_args(raw_args)
-    print(args)
 
-    # parse the path # TODO catch exceptions?
-    path, file = parse_path(args.path)
+    if args.dry_run and not args.q:
+        print("Dry run enabled")
+
+    # parse the path
+    path, file = _parse_path(args.path)
     file_from_path = True
 
     if file and args.file:
         print("File already provided in path, --file argument is ignored", file=sys.stderr)
+
+    if args.delete and args.write:
+        print("Argument --delete and --write cannot be used together", file=sys.stderr)
+        exit(1)
 
     # use argument if not provided in path
     if not file:
         file = args.file
         file_from_path = False
 
-    # no file is provided so default to kdeglobals
+    # no file is provided so default it is
     if not file:
-        file = PREDEFINED_FILES['kdeglobals'] # TODO make this into a global var
+        file = DEFAULT_FILE
 
         if not args.q:
             print('No file specified, defaulting to kdeglobals')
 
-    # only expand if inside the path
+    # only expand if file is specified inside the path
     if file_from_path:
+        # lowercase cause some files are just weirdly cased
         file = file.lower()
-
-        # get the actual path of the file if its one of the aliases
         if file in PREDEFINED_FILES:
             file = PREDEFINED_FILES[file]
         else:
@@ -260,21 +266,77 @@ Examples:
             print(f"Config file '{file}' is not in the database, please provide a full path using --file argument")
             exit(1)
 
-    # i dont have to check anything about the file, it will be created anyways
+    key = path.pop()
+    section = ']['.join(path)
 
-    if args.write:
+    # the file may not exist
+    try:
+        data = _read_file(file)
+    except FileNotFoundError:
+        data = []
+
+    from io import StringIO
+
+    if args.delete:
         if not args.q:
-            print("Writing '{args.write}' to '{args.path}'")
+            print(f"Deleting '{args.path}' in '{file}'")
 
-        from io import StringIO
+        try:
+            if not args.q:
+                print(f"Value was '{data[section][key]}'")
 
-        data = read_file(file)
-        # pretend i wrote to it
-        buffer = StringIO()
-        write_file(buffer, data)
-        print(buffer.getvalue())
+            del data[section][key]
+        except KeyError:
+            # exit as there is no need to write to file as either the section
+            # or the key do not exist
+            exit(0)
 
-    print(file, path)
+        if not args.dry_run:
+            with open(file, 'w') as fp:
+                _write_file(fp, data)
+        else:
+            buffer = StringIO()
+            _write_file(buffer, data)
+            print(buffer.getvalue())
+    elif args.write:
+        if not args.q:
+            print(f"Setting '{args.path}' to '{args.write}' in '{file}'")
+
+            if not args.q:
+                # TODO this may be too verbose? make a verbose flag?
+                try:
+                    print(f"Value was '{data[section][key]}'")
+                except KeyError:
+                    pass
+
+            try:
+                data[section][key] = args.write
+            except KeyError:
+                # the section does not exist so create it
+                data[section] = { key: args.write }
+
+        if not args.dry_run:
+            with open(file, 'w') as fp:
+                _write_file(fp, data)
+        else:
+            buffer = StringIO()
+            _write_file(buffer, data)
+            print(buffer.getvalue())
+    else:
+        if not data:
+            if not args.q:
+                print(f"File '{file}' is empty or does not exist")
+
+            exit(0)
+
+        try:
+            print(data[section][key])
+        except KeyError:
+            # i am intentionally return with code 0 as it is not an error
+            if not args.q:
+                print(f"Path '{args.path}' not found in '{file}'")
+
+            exit(0)
 
 if __name__ == '__main__':
     main()
