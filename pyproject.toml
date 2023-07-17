@@ -26,3 +26,8 @@ Tracker = "https://github.com/sandorex/kcfg/issues"
 [project.scripts]
 kcfg = "kcfg:main"
 
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+
