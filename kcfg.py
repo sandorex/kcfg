@@ -297,13 +297,18 @@ def main(raw_args=sys.argv[1:]):
             write_file(buffer, data)
             print(buffer.getvalue())
     else:
+        # all logs should be in stderr to allow capturing the data even without
+        # quiet flag
         if not data:
-            print_loud(f"File '{file}' is empty or does not exist")
+            print_loud(f"File '{file}' is empty or does not exist", file=sys.stderr)
 
             exit(0)
 
-        if read_section_key(data, section, key) is None:
-            print_loud(f"Path '{args.path}' not found in '{file}'")
+        value = read_section_key(data, section, key)
+        if value is None:
+            print_loud(f"Path '{args.path}' not found in '{file}'", file=sys.stderr)
+        else:
+            print(value)
 
 ## API ##
 
