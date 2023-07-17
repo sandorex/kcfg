@@ -1,0 +1,28 @@
+[build-system]
+requires = ["flit"]
+build-backend = "flit.buildapi"
+
+[project]
+name = "kcfg"
+authors = [
+    { name = "Aleksandar Radivojevic", email = "rzhw3h@gmail.com" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+dynamic = [ "version", "description" ]
+requires-python = ">=3.8.1"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Topic :: Utilities",
+    "Topic :: Desktop Environment",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+]
+
+[project.urls]
+Home = "https://github.com/sandorex/kcfg"
+Tracker = "https://github.com/sandorex/kcfg/issues"
+
+[project.scripts]
+kcfg = "kcfg:main"
+

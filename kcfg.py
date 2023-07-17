@@ -22,6 +22,10 @@
 # It should not have any dependencies outside the ones provided by python by
 # default
 # --------------------------------------------------------------------------- #
+"""Tool to read and write KDE INI config files, replaces kwriteconfig5 / kreadconfig5
+"""
+
+__version__ = '0.1.0'
 
 import sys
 import os
@@ -29,8 +33,6 @@ import configparser
 import argparse
 
 from typing import Tuple, List
-
-VERSION = '0.1.0a0'
 
 # these are known files and their path on the the computer
 PREDEFINED_FILES = {}
@@ -215,11 +217,15 @@ Examples:
         Alternatively specify the file directly
 
     $ kcfg --file ~/.config/kcminputrc '/Group 1/Group 2/Key'
+
+        To write to a file just add --write value
+
+    $ kcfg --file ~/.config/kcminputrc '/Group 1/Group 2/Key' --write true
 """ + ' \n')
-    parser.add_argument('--version', action='version', version=f"%(prog)s {VERSION}")
-    parser.add_argument('-q', action='store_true', help='makes the application not write anything, unless any error arises')
+    parser.add_argument('--version', action='version', version=f"%(prog)s {__version__}")
+    parser.add_argument('-q', '--quiet', action='store_true', help='makes the application not write anything, unless any error arises')
     parser.add_argument('--file', type=str, help='file to use for read/write operation, error if path is already specified in the path')
-    parser.add_argument('--write', type=str, help='write following value to the path')
+    parser.add_argument('--write', type=str, help='write following value VERBATIM')
     parser.add_argument('--delete', action='store_true', help='delete the key value if it exists')
     parser.add_argument('--dry-run', dest='dry_run', action='store_true', help='prints the result instead of writing to the file, does nothing when reading')
     parser.add_argument('-l', '--list-configs', action=make_final_action(_print_configs), help='lists all known config files then quits')
