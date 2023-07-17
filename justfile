@@ -7,7 +7,7 @@ build: _venv
 
 # run tests
 test *args: _venv-test
-    "{{PYTHON_EXE}}" -m pytest -v {{args}} tests/
+    "{{PYTHON_EXE}}" -m pytest {{args}} tests/
 
 # tests then builds and pushes to pypi
 publish: test _venv
@@ -21,6 +21,7 @@ clean:
 _venv:
     test -d "{{PYTHON_VENV}}" || python3 -m venv "{{PYTHON_VENV}}"
     test -f "{{PYTHON_VENV}}/bin/flit" || "{{PYTHON_EXE}}" -m pip install flit
+    test -f "{{PYTHON_VENV}}/bin/kcfg" || "{{PYTHON_EXE}}" -m flit install --symlink
 
 # creates a venv and installs testing deps if not already done
 _venv-test: _venv

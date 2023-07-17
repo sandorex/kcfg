@@ -112,7 +112,7 @@ def _parse_path(path: str) -> Tuple[List[str], str]:
         path = path.replace('//', '/')
 
     # leading slashes are useless
-    if path.endswith('/'):
+    if path != '/' and path.endswith('/'):
         path = path[:-1]
 
     # path must contain a slash
@@ -259,7 +259,8 @@ def main(raw_args=sys.argv[1:]):
 
     # the file may not exist
     try:
-        data = read_file(file)
+        with open(file, 'r') as file:
+            data = read_file(file)
     except FileNotFoundError:
         data = {}
 
@@ -324,7 +325,7 @@ def write_file(fp, data):
 # TODO deal with locking [$i]
 # TODO deal with dynamic evaluation [$e]
 # read more at https://userbase.kde.org/KDE_System_Administration/Configuration_Files#Example:_Using_[$i]
-def read_file(filepath) -> dict:
+def read_file(fp) -> dict:
     """Reads data from KDE INI config file
 
     There was no need for nay processing as configparser does not care for correctness
@@ -334,10 +335,7 @@ def read_file(filepath) -> dict:
     # preserves the case
     parser.optionxform = str
 
-    with open(filepath, 'r') as f:
-        data = f.read()
-
-    parser.read_string(data)
+    parser.read_string(fp.read())
 
     # return a dict
     return { x: dict(parser.items(x)) for x in parser.sections() }
