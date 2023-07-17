@@ -31,8 +31,9 @@ import sys
 import os
 import configparser
 import argparse
+from io import StringIO
 
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 # these are known files and their path on the the computer
 PREDEFINED_FILES = {}
@@ -99,42 +100,6 @@ for file in DOT_CONFIG_FILES:
 # default file used if no file is specified
 DEFAULT_FILE = PREDEFINED_FILES['kdeglobals']
 
-def _write_file(fp, data):
-    """Writes data to file as INI
-
-    I think there is no need for any processing, just using bare `configparser`
-    """
-    parser = configparser.ConfigParser()
-
-    # preserves case
-    parser.optionxform = str
-
-    parser.read_dict(data)
-
-    # kwriteconfig5 does not add spaces around delimiters
-    parser.write(fp, space_around_delimiters=False)
-
-# TODO deal with locking [$i]
-# TODO deal with dynamic evaluation [$e]
-# read more at https://userbase.kde.org/KDE_System_Administration/Configuration_Files#Example:_Using_[$i]
-def _read_file(filepath) -> dict:
-    """Reads data from KDE INI config file
-
-    There was no need for nay processing as configparser does not care for correctness
-    """
-    parser = configparser.ConfigParser()
-
-    # preserves the case
-    parser.optionxform = str
-
-    with open(filepath, 'r') as f:
-        data = f.read()
-
-    parser.read_string(data)
-
-    # return a dict
-    return { x: dict(parser.items(x)) for x in parser.sections() }
-
 def _parse_path(path: str) -> Tuple[List[str], str]:
     """Parses path for the setting, returns the name of section and optionally file
 
@@ -177,11 +142,15 @@ def _print_configs():
     print('  https://github.com/sandorex/kcfg')
     print()
 
-# NOTE you can if you want to run the main function with args without running
-# the script like `main(['kcminputrc/11111/2222/MouseAcceleration', '--write', '1'])`
-def main(raw_args=sys.argv[1:]):
+def _print_version_api():
+    '''Prints the version as a number for easy comparison in shell scripts'''
+    print(__version__.replace('.', ''))
+
+def _create_parser():
+    '''Function that builds the parser'''
+
     def make_final_action(fn):
-        '''Creates action that runs fn and then quits'''
+        '''Creates argparse action that runs fn and then quits'''
         class custom_action(argparse.Action):
             def __init__(self, nargs=0, **kw):
                 super().__init__(nargs=nargs, **kw)
@@ -223,6 +192,7 @@ Examples:
     $ kcfg --file ~/.config/kcminputrc '/Group 1/Group 2/Key' --write true
 """ + ' \n')
     parser.add_argument('--version', action='version', version=f"%(prog)s {__version__}")
+    parser.add_argument('--version-api', action=make_final_action(_print_version_api), help='prints program version as an integer for ease of use in shell scripts')
     parser.add_argument('-q', '--quiet', action='store_true', help='makes the application not write anything, unless any error arises')
     parser.add_argument('--file', type=str, help='file to use for read/write operation, error if path is already specified in the path')
     parser.add_argument('--write', type=str, help='write following value VERBATIM')
@@ -233,20 +203,33 @@ Examples:
     # positional
     parser.add_argument('path', help='path to use for read/write operation')
 
+    return parser
+
+def main(raw_args=sys.argv[1:]):
+    parser = _create_parser()
     args = parser.parse_args(raw_args)
 
-    if args.dry_run and not args.quiet:
-        print("Dry run enabled")
+    def print_loud(*argss, **kwargs):
+        '''Prints only if quiet is not enabled'''
+        if not args.quiet:
+            print(*argss, **kwargs)
+
+    def print_err(*args, **kwargs):
+        '''Prints error message to stderr'''
+        print('[Error]', *args, **kwargs, file=sys.stderr)
+
+    if args.dry_run:
+        print_loud("Dry run enabled")
 
     # parse the path
     path, file = _parse_path(args.path)
     file_from_path = True
 
     if file and args.file:
-        print("File already provided in path, --file argument is ignored", file=sys.stderr)
+        print_err("File already provided in path, --file argument is ignored")
 
     if args.delete and args.write:
-        print("Argument --delete and --write cannot be used together", file=sys.stderr)
+        print_err("Argument --delete and --write cannot be used together")
         exit(1)
 
     # use argument if not provided in path
@@ -258,8 +241,7 @@ Examples:
     if not file:
         file = DEFAULT_FILE
 
-        if not args.quiet:
-            print('No file specified, defaulting to kdeglobals')
+        print_loud('No file specified, defaulting to kdeglobals')
 
     # only expand if file is specified inside the path
     if file_from_path:
@@ -269,7 +251,7 @@ Examples:
             file = PREDEFINED_FILES[file]
         else:
             # the file is not known
-            print(f"Config file '{file}' is not in the database, please provide a full path using --file argument")
+            print_err(f"Config file '{file}' is not in the database, please provide a full path using --file argument")
             exit(1)
 
     key = path.pop()
@@ -277,72 +259,119 @@ Examples:
 
     # the file may not exist
     try:
-        data = _read_file(file)
+        data = read_file(file)
     except FileNotFoundError:
         data = {}
 
-    from io import StringIO
-
     if args.delete:
-        if not args.quiet:
-            print(f"Deleting '{args.path}' in '{file}'")
+        print_loud(f"Deleting '{args.path}' in '{file}'")
 
-        try:
-            if not args.quiet:
-                print(f"Value was '{data[section][key]}'")
-
-            del data[section][key]
-        except KeyError:
+        old_value = delete_section_key(data, section, key)
+        if old_value is None:
             # exit as there is no need to write to file as either the section
             # or the key do not exist
             exit(0)
 
+        print_loud(f"Value was '{old_value}'")
+
         if not args.dry_run:
             with open(file, 'w') as fp:
-                _write_file(fp, data)
+                write_file(fp, data)
         else:
             buffer = StringIO()
-            _write_file(buffer, data)
+            write_file(buffer, data)
             print(buffer.getvalue())
     elif args.write is not None:
-        if not args.quiet:
-            print(f"Setting '{args.path}' to '{args.write}' in '{file}'")
+        print_loud(f"Setting '{args.path}' to '{args.write}' in '{file}'")
 
-            if not args.quiet:
-                # TODO this may be too verbose? make a verbose flag?
-                try:
-                    print(f"Value was '{data[section][key]}'")
-                except KeyError:
-                    pass
-
-            try:
-                data[section][key] = args.write
-            except KeyError:
-                # the section does not exist so create it
-                data[section] = { key: args.write }
+        old_value = set_section_key(data, section, key, args.write)
+        if old_value is not None:
+            print_loud(f"Value was '{old_value}'")
 
         if not args.dry_run:
             with open(file, 'w') as fp:
-                _write_file(fp, data)
+                write_file(fp, data)
         else:
             buffer = StringIO()
-            _write_file(buffer, data)
+            write_file(buffer, data)
             print(buffer.getvalue())
     else:
         if not data:
-            if not args.quiet:
-                print(f"File '{file}' is empty or does not exist")
+            print_loud(f"File '{file}' is empty or does not exist")
 
             exit(0)
 
-        try:
-            print(data[section][key])
-        except KeyError:
-            # i am intentionally return with code 0 as it is not an error
-            if not args.quiet:
-                print(f"Path '{args.path}' not found in '{file}'")
+        if read_section_key(data, section, key) is None:
+            print_loud(f"Path '{args.path}' not found in '{file}'")
 
-            exit(0)
+## API ##
+
+def write_file(fp, data):
+    """Writes data to file as INI
+
+    I think there is no need for any processing, just using bare `configparser`
+    """
+    parser = configparser.ConfigParser()
+
+    # preserves case
+    parser.optionxform = str
+
+    parser.read_dict(data)
+
+    # kwriteconfig5 does not add spaces around delimiters
+    parser.write(fp, space_around_delimiters=False)
+
+# TODO deal with locking [$i]
+# TODO deal with dynamic evaluation [$e]
+# read more at https://userbase.kde.org/KDE_System_Administration/Configuration_Files#Example:_Using_[$i]
+def read_file(filepath) -> dict:
+    """Reads data from KDE INI config file
+
+    There was no need for nay processing as configparser does not care for correctness
+    """
+    parser = configparser.ConfigParser()
+
+    # preserves the case
+    parser.optionxform = str
+
+    with open(filepath, 'r') as f:
+        data = f.read()
+
+    parser.read_string(data)
+
+    # return a dict
+    return { x: dict(parser.items(x)) for x in parser.sections() }
+
+def delete_section_key(data, section, key) -> Optional[str]:
+    """Deletes the key in section of data, returns original value if it exists
+    otherwise None"""
+    try:
+        old = data[section][key]
+        del data[section][key]
+        return old
+    except KeyError:
+        return None
+
+def set_section_key(data, section, key, value) -> Optional[str]:
+    """Sets the key in section of data to value, if it exists already the
+    original value is returned otherwise None
+    """
+    try:
+        old = data[section][key]
+        data[section][key] = value
+        return old
+    except KeyError:
+        # the section does not exist so create it
+        data[section] = { key: value }
+        return None
+
+def read_section_key(data, section, key, default=None) -> Optional[str]:
+    """Reads key from section of data, if the key (or section) does not exist
+    then default is return"""
+    try:
+        return data[section][key]
+    except KeyError:
+        return default
 
 if __name__ == '__main__':
     main()
