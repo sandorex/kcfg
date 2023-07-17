@@ -25,7 +25,7 @@
 """Tool to read and write KDE INI config files, replaces kwriteconfig5 / kreadconfig5
 """
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 import sys
 import os
@@ -235,7 +235,7 @@ Examples:
 
     args = parser.parse_args(raw_args)
 
-    if args.dry_run and not args.q:
+    if args.dry_run and not args.quiet:
         print("Dry run enabled")
 
     # parse the path
@@ -258,7 +258,7 @@ Examples:
     if not file:
         file = DEFAULT_FILE
 
-        if not args.q:
+        if not args.quiet:
             print('No file specified, defaulting to kdeglobals')
 
     # only expand if file is specified inside the path
@@ -279,16 +279,16 @@ Examples:
     try:
         data = _read_file(file)
     except FileNotFoundError:
-        data = []
+        data = {}
 
     from io import StringIO
 
     if args.delete:
-        if not args.q:
+        if not args.quiet:
             print(f"Deleting '{args.path}' in '{file}'")
 
         try:
-            if not args.q:
+            if not args.quiet:
                 print(f"Value was '{data[section][key]}'")
 
             del data[section][key]
@@ -304,11 +304,11 @@ Examples:
             buffer = StringIO()
             _write_file(buffer, data)
             print(buffer.getvalue())
-    elif args.write:
-        if not args.q:
+    elif args.write is not None:
+        if not args.quiet:
             print(f"Setting '{args.path}' to '{args.write}' in '{file}'")
 
-            if not args.q:
+            if not args.quiet:
                 # TODO this may be too verbose? make a verbose flag?
                 try:
                     print(f"Value was '{data[section][key]}'")
@@ -330,7 +330,7 @@ Examples:
             print(buffer.getvalue())
     else:
         if not data:
-            if not args.q:
+            if not args.quiet:
                 print(f"File '{file}' is empty or does not exist")
 
             exit(0)
@@ -339,7 +339,7 @@ Examples:
             print(data[section][key])
         except KeyError:
             # i am intentionally return with code 0 as it is not an error
-            if not args.q:
+            if not args.quiet:
                 print(f"Path '{args.path}' not found in '{file}'")
 
             exit(0)
