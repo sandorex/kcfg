@@ -259,8 +259,9 @@ def main(raw_args=sys.argv[1:]):
 
     # the file may not exist
     try:
-        with open(file, 'r') as file:
-            data = read_file(file)
+        with open(file, 'r') as _file:
+            data = read_file(_file)
+        del _file
     except FileNotFoundError:
         data = {}
 
