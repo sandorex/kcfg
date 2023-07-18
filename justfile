@@ -9,6 +9,10 @@ build: _venv
 test *args: _venv-test
     "{{PYTHON_EXE}}" -m pytest {{args}} tests/
 
+# run tests
+cov *args: _venv-test
+    "{{PYTHON_EXE}}" -m pytest {{args}} --cov=kcfg tests/
+
 # tests then builds and pushes to pypi
 publish: test _venv
     "{{PYTHON_EXE}}" -m flit publish
@@ -26,3 +30,4 @@ _venv:
 # creates a venv and installs testing deps if not already done
 _venv-test: _venv
     test -f "{{PYTHON_VENV}}/bin/pytest" || "{{PYTHON_EXE}}" -m pip install pytest
+    test -f "{{PYTHON_VENV}}/bin/coverage" || "{{PYTHON_EXE}}" -m pip install pytest-cov

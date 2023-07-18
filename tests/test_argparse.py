@@ -33,3 +33,29 @@ def test_version(capsys):
     assert captured.out.strip() == "kcfg " + kcfg.__version__
     assert captured.err == ""
 
+def test_argparse_bad_args(tmp_path, capsys, monkeypatch):
+    # test without file provided
+    e = main_wrapper(['/Group/Key'])
+
+    captured = capsys.readouterr()
+
+    assert e.type == SystemExit
+    assert e.value.code == 1
+    assert captured.out.strip() == ''
+    assert 'No file specified' in captured.err.strip()
+
+    # just in case it breaks it wont fuck up your real configuration
+    with monkeypatch.context() as m:
+        m.setitem(kcfg.PREDEFINED_FILES, 'tempfile', str(tmp_path / 'tempfile'))
+
+        # test if it fails when --write and --delete are set at the same time
+        e = main_wrapper(['tempfile/Group/Key', '--write', '', '--delete'])
+        assert e.type == SystemExit
+        assert e.value.code == 1
+
+    # test if it fails with invalid file alias
+    e = main_wrapper(['tempfile/Group/Key', '--write', ''])
+    assert e.type == SystemExit
+    assert e.value.code == 1
+
+

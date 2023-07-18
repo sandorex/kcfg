@@ -27,7 +27,7 @@ Key2=Three
     except SystemExit:
         pass
 
-        assert file.read_text() == r"""[Group 1][Group 2][Group 3]
+    assert file.read_text() == r"""[Group 1][Group 2][Group 3]
 Key1=One
 Key2=Three
 Key3=Three
@@ -59,7 +59,7 @@ def test_delete(tmp_path):
     except SystemExit:
         pass
 
-    assert file.read_text() ==  """[Group 1][Group 2][Group 3]
+    assert file.read_text() == """[Group 1][Group 2][Group 3]
 Key1=One
 
 """

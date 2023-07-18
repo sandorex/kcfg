@@ -82,6 +82,11 @@ def test_set():
     kcfg.set_section_key(data, 'Test', 'Key', 'Value')
     assert data == TEST_DATA
 
+    # set when multiple other keys already exist
+    data = { 'Test': { 'Key1': 'Value1', 'Key2': 'Value2' } }
+    kcfg.set_section_key(data, 'Test', 'Key3', 'Value3')
+    assert data == { 'Test': { 'Key1': 'Value1', 'Key2': 'Value2', 'Key3': 'Value3' } }
+
     # same value
     data = TEST_DATA
     kcfg.set_section_key(data, 'Test', 'Key', 'Value')
